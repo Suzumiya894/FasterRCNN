@@ -23,8 +23,7 @@ import os
 import torch as t
 from tqdm import tqdm
 
-from .datasets.my_dataset import Dataset
-# from .datasets.voc import Dataset
+from .datasets import voc
 from .models.faster_rcnn import FasterRCNNModel
 from .models import vgg16
 from .models import vgg16_torch
@@ -33,12 +32,11 @@ from .statistics import TrainingStatistics
 from .statistics import PrecisionRecallCurveCalculator
 from . import state
 from . import utils
-from .utils import DEVICE
 from . import visualize
 
 
 def render_anchors(backbone):
-  training_data = Dataset(
+  training_data = voc.Dataset(
     image_preprocessing_params = backbone.image_preprocessing_params,
     compute_feature_map_shape_fn = backbone.compute_feature_map_shape,
     feature_pixels = backbone.feature_pixels,
@@ -63,7 +61,7 @@ def render_anchors(backbone):
 
 def evaluate(model, eval_data = None, num_samples = None, plot = False, print_average_precisions = False):
   if eval_data is None:
-    eval_data = Dataset(
+    eval_data = voc.Dataset(
       image_preprocessing_params = model.backbone.image_preprocessing_params,
       compute_feature_map_shape_fn = model.backbone.compute_feature_map_shape,
       feature_pixels = model.backbone.feature_pixels,
@@ -79,7 +77,7 @@ def evaluate(model, eval_data = None, num_samples = None, plot = False, print_av
   print("Evaluating '%s'..." % eval_data.split)
   for sample in tqdm(iterable = iter(eval_data), total = num_samples):
     scored_boxes_by_class_index = model.predict(
-      image_data = t.from_numpy(sample.image_data).unsqueeze(dim = 0).to(DEVICE),
+      image_data = t.from_numpy(sample.image_data).unsqueeze(dim = 0).cuda(),
       score_threshold = 0.05  # lower threshold for evaluation
     )
     precision_recall_curve.add_image_results(
@@ -90,11 +88,11 @@ def evaluate(model, eval_data = None, num_samples = None, plot = False, print_av
     if i >= num_samples:
       break
   if print_average_precisions:
-    precision_recall_curve.print_average_precisions(class_index_to_name = Dataset.class_index_to_name)
+    precision_recall_curve.print_average_precisions(class_index_to_name = voc.Dataset.class_index_to_name)
   mean_average_precision = 100.0 * precision_recall_curve.compute_mean_average_precision()
   print("Mean Average Precision = %1.2f%%" % mean_average_precision)
   if plot:
-    precision_recall_curve.plot_average_precisions(class_index_to_name = Dataset.class_index_to_name)
+    precision_recall_curve.plot_average_precisions(class_index_to_name = voc.Dataset.class_index_to_name)
   return mean_average_precision
 
 def create_optimizer(model):
@@ -150,7 +148,7 @@ def train(model):
   print(f"augment = {not options.no_augment}")
   print(f"cache = {options.cache_images}")
   
-  training_data = Dataset(
+  training_data = voc.Dataset(
     dir = options.dataset_dir,
     split = options.train_split,
     image_preprocessing_params = model.backbone.image_preprocessing_params,
@@ -160,7 +158,7 @@ def train(model):
     shuffle = True,
     cache = options.cache_images
   )
-  eval_data = Dataset(
+  eval_data = voc.Dataset(
     dir = options.dataset_dir,
     split = options.eval_split,
     image_preprocessing_params = model.backbone.image_preprocessing_params,
@@ -182,27 +180,16 @@ def train(model):
     stats = TrainingStatistics()
     progbar = tqdm(iterable = iter(training_data), total = training_data.num_samples, postfix = stats.get_progbar_postfix())
     for sample in progbar:
-      # cpu
       loss = model.train_step(  # don't retain any tensors we don't need (helps memory usage)
         optimizer = optimizer,
-        image_data = t.from_numpy(sample.image_data).unsqueeze(dim = 0).to(DEVICE),
+        image_data = t.from_numpy(sample.image_data).unsqueeze(dim = 0).cuda(),
         anchor_map = sample.anchor_map,
         anchor_valid_map = sample.anchor_valid_map,
-        gt_rpn_map = t.from_numpy(sample.gt_rpn_map).unsqueeze(dim = 0).to(DEVICE),
+        gt_rpn_map = t.from_numpy(sample.gt_rpn_map).unsqueeze(dim = 0).cuda(),
         gt_rpn_object_indices = [ sample.gt_rpn_object_indices ],
         gt_rpn_background_indices = [ sample.gt_rpn_background_indices ],
         gt_boxes = [ sample.gt_boxes ]
       )
-      # loss = model.train_step(  # don't retain any tensors we don't need (helps memory usage)
-      #   optimizer = optimizer,
-      #   image_data = t.from_numpy(sample.image_data).unsqueeze(dim = 0).cuda(),
-      #   anchor_map = sample.anchor_map,
-      #   anchor_valid_map = sample.anchor_valid_map,
-      #   gt_rpn_map = t.from_numpy(sample.gt_rpn_map).unsqueeze(dim = 0).cuda(),
-      #   gt_rpn_object_indices = [ sample.gt_rpn_object_indices ],
-      #   gt_rpn_background_indices = [ sample.gt_rpn_background_indices ],
-      #   gt_boxes = [ sample.gt_boxes ]
-      # )
       stats.on_training_step(loss = loss)
       progbar.set_postfix(stats.get_progbar_postfix())
     last_epoch = epoch == options.epochs
@@ -245,14 +232,14 @@ def train(model):
   )
 
 def predict(model, image_data, image, show_image, output_path):
-  image_data = t.from_numpy(image_data).unsqueeze(dim = 0).to(DEVICE)
+  image_data = t.from_numpy(image_data).unsqueeze(dim = 0).cuda()
   scored_boxes_by_class_index = model.predict(image_data = image_data, score_threshold = 0.7)
   visualize.show_detections(
     output_path = output_path,
     show_image = show_image,
     image = image,
     scored_boxes_by_class_index = scored_boxes_by_class_index,
-    class_index_to_name = Dataset.class_index_to_name
+    class_index_to_name = voc.Dataset.class_index_to_name
   )
 
 def predict_one(model, url, show_image, output_path):
@@ -265,7 +252,7 @@ def predict_all(model, split):
   if not os.path.exists(dirname):
     os.makedirs(dirname)
   print("Rendering predictions from '%s' set to '%s'..." % (split, dirname))
-  dataset = Dataset(
+  dataset = voc.Dataset(
     dir = options.dataset_dir,
     split = split,
     image_preprocessing_params = model.backbone.image_preprocessing_params,
@@ -279,7 +266,6 @@ def predict_all(model, split):
     predict(model = model, image_data = sample.image_data, image = sample.image, show_image = False, output_path = output_path)
 
 if __name__ == "__main__":
-  # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
   parser = argparse.ArgumentParser("FasterRCNN")
   group = parser.add_mutually_exclusive_group()
   group.add_argument("--train", action = "store_true", help = "Train model")
@@ -332,10 +318,10 @@ if __name__ == "__main__":
 
   # Construct model and load initial weights
   model = FasterRCNNModel(
-    num_classes = Dataset.num_classes,
+    num_classes = voc.Dataset.num_classes,
     backbone = backbone,
     allow_edge_proposals = not options.exclude_edge_proposals
-  ).to(DEVICE)
+  ).cuda()
   if options.load_from:
     state.load(model = model, filepath = options.load_from)
 

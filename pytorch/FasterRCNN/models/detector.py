@@ -16,6 +16,8 @@ from torch.nn import functional as F
 from torchvision.ops import RoIPool
 from torchvision.models import vgg16
 
+from pytorch.FasterRCNN.utils import DEVICE
+
 
 class DetectorNetwork(nn.Module):
   def __init__(self, num_classes, backbone):
@@ -62,7 +64,7 @@ class DetectorNetwork(nn.Module):
     """
     # Batch size of one for now, so no need to associate proposals with batches
     assert feature_map.shape[0] == 1, "Batch size must be 1"
-    batch_idxs = t.zeros((proposals.shape[0], 1)).cuda()
+    batch_idxs = t.zeros((proposals.shape[0], 1)).to(DEVICE)
 
     # (N, 5) tensor of (batch_idx, x1, y1, x2, y2)
     indexed_proposals = t.cat([ batch_idxs, proposals ], dim = 1)

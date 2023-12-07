@@ -1,4 +1,9 @@
 # Faster R-CNN in PyTorch and TensorFlow 2 w/ Keras
+
+`python -m pytorch.FasterRCNN --train --learning-rate=1e-3 --epochs=10 --load-from=vgg16_caffe.pth --save-best-to=results_1.pth --dataset-dir=MY_DATASET --train-split=train --checkpoint-dir=checkpoint --log-csv=logs/logs.csv`
+
+
+
 *Copyright 2021-2022 Bart Trzynadlowski*
 
 ## Overview
@@ -254,6 +259,7 @@ I went through every line of code tearing the model apart and putting it back to
 involves changing the learning rate after 10 epochs. In my implementation, this is done by re-running the program initialized with the previous run's weights, but I was clobbering the new learning rate with the *old* one.
 
 **Takeaway Lesson:** When saving and loading model state, pay careful attention to what it actually includes.
+
 
 ### Instabilities in TensorFlow Due to Gradient Propagation
 

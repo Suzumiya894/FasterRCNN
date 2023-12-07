@@ -24,6 +24,7 @@ from torch.nn import functional as F
 from torchvision.ops import nms
 
 from . import math_utils
+from pytorch.FasterRCNN.utils import DEVICE
 
 
 class RegionProposalNetwork(nn.Module):
@@ -117,10 +118,14 @@ class RegionProposalNetwork(nn.Module):
     # Convert regressions to box corners
     proposals = math_utils.t_convert_deltas_to_boxes(
       box_deltas = box_deltas,
-      anchors = t.from_numpy(anchors).cuda(),
-      box_delta_means = t.tensor([0, 0, 0, 0], dtype = t.float32, device = "cuda"),
-      box_delta_stds = t.tensor([1, 1, 1, 1], dtype = t.float32, device = "cuda")
+      anchors = t.from_numpy(anchors).to(DEVICE),
+      box_delta_means = t.tensor([0, 0, 0, 0], dtype = t.float32, device = DEVICE),
+      box_delta_stds = t.tensor([1, 1, 1, 1], dtype = t.float32, device = DEVICE)
     )
+    #   anchors = t.from_numpy(anchors).cuda(),
+    #   box_delta_means = t.tensor([0, 0, 0, 0], dtype = t.float32, device = "cuda"),
+    #   box_delta_stds = t.tensor([1, 1, 1, 1], dtype = t.float32, device = "cuda")
+    # )
 
     # Keep only the top-N scores. Note that we do not care whether the
     # proposals were labeled as objects (score > 0.5) and peform a simple
@@ -141,7 +146,7 @@ class RegionProposalNetwork(nn.Module):
     width = proposals[:,3] - proposals[:,1]
     idxs = t.where((height >= 16) & (width >= 16))[0]
     proposals = proposals[idxs]
-    objectness_scores = objectness_scores[idxs]
+    objectness_scores = objectness_scores[idxs.cpu()].to(DEVICE)
 
     # Perform NMS
     idxs = nms(
@@ -205,7 +210,13 @@ def class_loss(predicted_scores, y_true):
   N_cls = t.count_nonzero(y_mask) + epsilon
 
   # Compute element-wise loss for all anchors
-  loss_all_anchors = F.binary_cross_entropy(input = y_predicted_class, target = y_true_class, reduction = "none")
+  try:
+    loss_all_anchors = F.binary_cross_entropy(input = y_predicted_class, target = y_true_class, reduction = "none")
+  except:
+    print("-" * 25 + "in rpn" + "-" * 25)
+    print(f"input min is {y_predicted_class.min()}")
+    print(f"input max is {y_predicted_class.max()}")
+    import pdb; pdb.set_trace()
 
   # Zero out the ones which should not have been included
   relevant_loss_terms = y_mask * loss_all_anchors

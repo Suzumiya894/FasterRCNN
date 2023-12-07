@@ -17,6 +17,7 @@ from torch import nn
 from torchvision.ops import nms
 
 from pytorch.FasterRCNN import utils
+from pytorch.FasterRCNN.utils import DEVICE
 from . import anchors
 from . import math_utils
 from . import vgg16
@@ -390,7 +391,7 @@ class FasterRCNNModel(nn.Module):
     positive_anchors = object_indices[0]
     negative_anchors = background_indices[0]
     assert len(positive_anchors) + len(negative_anchors) >= self._rpn_minibatch_size, "Image has insufficient anchors for RPN minibatch size of %d" % self._rpn_minibatch_size
-    assert len(positive_anchors) > 0, "Image does not have any positive anchors"
+    # assert len(positive_anchors) > 0, "Image does not have any positive anchors"
     assert self._rpn_minibatch_size % 2 == 0, "RPN minibatch size must be evenly divisible"
 
     # Sample, producing indices into the index maps
@@ -398,8 +399,15 @@ class FasterRCNNModel(nn.Module):
     num_negative_anchors = len(negative_anchors)
     num_positive_samples = min(self._rpn_minibatch_size // 2, num_positive_anchors) # up to half the samples should be positive, if possible
     num_negative_samples = self._rpn_minibatch_size - num_positive_samples          # the rest should be negative
-    positive_anchor_idxs = random.sample(range(num_positive_anchors), num_positive_samples)
-    negative_anchor_idxs = random.sample(range(num_negative_anchors), num_negative_samples)
+    try:
+      positive_anchor_idxs = random.sample(range(num_positive_anchors), num_positive_samples)
+      negative_anchor_idxs = random.sample(range(num_negative_anchors), num_negative_samples)
+    except:
+      print(f"num_positive_anchors is {num_positive_anchors}")
+      print(f"num_positive_samples is {num_positive_samples}")
+      print(f"self._rpn_minibatch_size is {self._rpn_minibatch_size}")
+      print(f"num_negative_anchors is {num_negative_anchors}")
+      import pdb; pdb.set_trace()
 
     # Construct index expressions into RPN map
     positive_anchors = positive_anchors[positive_anchor_idxs]
@@ -457,14 +465,14 @@ class FasterRCNNModel(nn.Module):
 
     # Convert ground truth box corners to (M,4) tensor and class indices to (M,)
     gt_box_corners = np.array([ box.corners for box in gt_boxes ], dtype = np.float32)
-    gt_box_corners = t.from_numpy(gt_box_corners).cuda()
-    gt_box_class_idxs = t.tensor([ box.class_index for box in gt_boxes ], dtype = t.long, device = "cuda")
+    gt_box_corners = t.from_numpy(gt_box_corners).to(DEVICE)
+    gt_box_class_idxs = t.tensor([ box.class_index for box in gt_boxes ], dtype = t.long, device = DEVICE)
 
     # Let's be crafty and create some fake proposals that match the ground
     # truth boxes exactly. This isn't strictly necessary and the model should
     # work without it but it will help training and will ensure that there are
     # always some positive examples to train on.
-    proposals = t.vstack([ proposals, gt_box_corners ])
+    proposals = t.vstack([ proposals.to(DEVICE), gt_box_corners ])
 
     # Compute IoU between each proposal (N,4) and each ground truth box (M,4)
     # -> (N, M)
@@ -491,7 +499,7 @@ class FasterRCNNModel(nn.Module):
 
     # One-hot encode class labels
     num_proposals = proposals.shape[0]
-    gt_classes = t.zeros((num_proposals, self._num_classes), dtype = t.float32, device = "cuda")  # (N,num_classes)
+    gt_classes = t.zeros((num_proposals, self._num_classes), dtype = t.float32, device = DEVICE)  # (N,num_classes)
     gt_classes[ t.arange(num_proposals), gt_box_class_idxs ] = 1.0
 
     # Convert proposals and ground truth boxes into "anchor" format (center
@@ -505,11 +513,12 @@ class FasterRCNNModel(nn.Module):
 
     # Compute box delta regression targets (ty, tx, th, tw) for each proposal
     # based on the best box selected
-    box_delta_targets = t.empty((num_proposals, 4), dtype = t.float32, device = "cuda") # (N,4)
+    device = DEVICE
+    box_delta_targets = t.empty((num_proposals, 4), dtype = t.float32, device = device) # (N,4)
     box_delta_targets[:,0:2] = (gt_box_centers - proposal_centers) / proposal_sides # ty = (gt_center_y - proposal_center_y) / proposal_height, tx = (gt_center_x - proposal_center_x) / proposal_width
     box_delta_targets[:,2:4] = t.log(gt_box_sides / proposal_sides)                 # th = log(gt_height / proposal_height), tw = (gt_width / proposal_width)
-    box_delta_means = t.tensor(self._detector_box_delta_means, dtype = t.float32, device = "cuda")
-    box_delta_stds = t.tensor(self._detector_box_delta_stds, dtype = t.float32, device = "cuda")
+    box_delta_means = t.tensor(self._detector_box_delta_means, dtype = t.float32, device = device)
+    box_delta_stds = t.tensor(self._detector_box_delta_stds, dtype = t.float32, device = device)
     box_delta_targets[:,:] -= box_delta_means                               # mean adjustment
     box_delta_targets[:,:] /= box_delta_stds                                # standard deviation scaling
 
@@ -517,7 +526,7 @@ class FasterRCNNModel(nn.Module):
     # the number of classes and [:,0,:] specifies a mask for the corresponding
     # target components at [:,1,:]. Targets are ordered (ty, tx, th, tw).
     # Background class 0 is not present at all.
-    gt_box_deltas = t.zeros((num_proposals, 2, 4 * (self._num_classes - 1)), dtype = t.float32, device = "cuda")
+    gt_box_deltas = t.zeros((num_proposals, 2, 4 * (self._num_classes - 1)), dtype = t.float32, device = device)
     gt_box_deltas[:,0,:] = t.repeat_interleave(gt_classes, repeats = 4, dim = 1)[:,4:]  # create masks using interleaved repetition, remembering to ignore class 0
     gt_box_deltas[:,1,:] = t.tile(box_delta_targets, dims = (1, self._num_classes - 1)) # populate regression targets with straightforward repetition (only those columns corresponding to class are masked on)
 

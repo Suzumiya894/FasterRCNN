@@ -201,6 +201,11 @@ def generate_rpn_map(anchor_map, anchor_valid_map, gt_boxes, object_iou_threshol
   gt_box_assignments = np.full(n, -1) # -1 means no box
 
   # Compute IoU between each anchor and each ground truth box, (N,M).
+  # if gt_boxes[0].class_index == 0:
+  #   ious = np.zeros([anchors.shape[0], gt_box_corners.shape[0]]).astype(np.float32)
+  # else:
+  #   ious = math_utils.intersection_over_union(boxes1 = anchors, boxes2 = gt_box_corners)
+  
   ious = math_utils.intersection_over_union(boxes1 = anchors, boxes2 = gt_box_corners)
 
   # Need to remove anchors that are invalid (straddle image boundaries) from
@@ -228,6 +233,9 @@ def generate_rpn_map(anchor_map, anchor_valid_map, gt_boxes, object_iou_threshol
   objectness_score[max_iou_per_anchor >= object_iou_threshold] = 1
 
   # Anchors that overlap the most with ground truth boxes are positive
+  # if gt_boxes[0].class_index != 0:
+  #   objectness_score[highest_iou_anchor_idxs] = 1
+  
   objectness_score[highest_iou_anchor_idxs] = 1
 
   # We assign the highest IoU ground truth box to each anchor. If no box met
@@ -242,7 +250,6 @@ def generate_rpn_map(anchor_map, anchor_valid_map, gt_boxes, object_iou_threshol
   # 1.
   enable_mask = (objectness_score >= 0).astype(np.float32)
   objectness_score[objectness_score < 0] = 0
-
   # Compute box delta regression targets for each anchor
   box_delta_targets = np.empty((n, 4))
   box_delta_targets[:,0:2] = (gt_box_centers[gt_box_assignments] - anchor_map[:,0:2]) / anchor_map[:,2:4] # ty = (box_center_y - anchor_center_y) / anchor_height, tx = (box_center_x - anchor_center_x) / anchor_width
