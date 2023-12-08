@@ -89,9 +89,9 @@ class Dataset:
             category_id = self.dataset_info['annotations'][idx]['category_id']
             bbox = self.dataset_info['annotations'][idx]['bbox']
             if category_id == 0:    # 无瑕疵图
-                # corners = np.array([0, 0, 0, 0]).astype(np.float32)
-                # corners = np.array([0, 0, 400, 0]).astype(np.float32)
-                continue
+                corners = np.array([0, 0, 0, 0]).astype(np.float32)
+                # corners = np.array([0, 0, 400, 400]).astype(np.float32)
+                # continue
             else:
                 corners = np.array([
                     bbox[0],

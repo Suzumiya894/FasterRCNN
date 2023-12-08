@@ -8,7 +8,7 @@
 
 import torch as t
 
-DEVICE = "cuda"
+DEVICE = "cpu"
 
 def no_grad(func):
   def wrapper_nograd(*args, **kwargs):

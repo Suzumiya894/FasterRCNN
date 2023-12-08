@@ -397,22 +397,28 @@ class FasterRCNNModel(nn.Module):
     # Sample, producing indices into the index maps
     num_positive_anchors = len(positive_anchors)
     num_negative_anchors = len(negative_anchors)
-    num_positive_samples = min(self._rpn_minibatch_size // 2, num_positive_anchors) # up to half the samples should be positive, if possible
-    num_negative_samples = self._rpn_minibatch_size - num_positive_samples          # the rest should be negative
-    try:
-      positive_anchor_idxs = random.sample(range(num_positive_anchors), num_positive_samples)
-      negative_anchor_idxs = random.sample(range(num_negative_anchors), num_negative_samples)
-    except:
-      print(f"num_positive_anchors is {num_positive_anchors}")
-      print(f"num_positive_samples is {num_positive_samples}")
-      print(f"self._rpn_minibatch_size is {self._rpn_minibatch_size}")
-      print(f"num_negative_anchors is {num_negative_anchors}")
-      import pdb; pdb.set_trace()
+    if num_positive_anchors != 0:
+      num_positive_samples = min(self._rpn_minibatch_size // 2, num_positive_anchors) # up to half the samples should be positive, if possible
+      num_negative_samples = self._rpn_minibatch_size - num_positive_samples          # the rest should be negative
+      try:
+        positive_anchor_idxs = random.sample(range(num_positive_anchors), num_positive_samples)
+        negative_anchor_idxs = random.sample(range(num_negative_anchors), num_negative_samples)
+      except:
+        print(f"num_positive_anchors is {num_positive_anchors}")
+        print(f"num_positive_samples is {num_positive_samples}")
+        print(f"self._rpn_minibatch_size is {self._rpn_minibatch_size}")
+        print(f"num_negative_anchors is {num_negative_anchors}")
+        import pdb; pdb.set_trace()
 
-    # Construct index expressions into RPN map
-    positive_anchors = positive_anchors[positive_anchor_idxs]
-    negative_anchors = negative_anchors[negative_anchor_idxs]
-    trainable_anchors = np.concatenate([ positive_anchors, negative_anchors ])
+      # Construct index expressions into RPN map
+      positive_anchors = positive_anchors[positive_anchor_idxs]
+      negative_anchors = negative_anchors[negative_anchor_idxs]
+      trainable_anchors = np.concatenate([ positive_anchors, negative_anchors ])
+    else: # 全是背景图
+      num_negative_samples = self._rpn_minibatch_size
+      negative_anchor_idxs = random.sample(range(num_negative_anchors), num_negative_samples)
+      trainable_anchors = negative_anchors[negative_anchor_idxs]
+
     batch_idxs = np.zeros(len(trainable_anchors))
     trainable_idxs = (batch_idxs, trainable_anchors[:,0], trainable_anchors[:,1], trainable_anchors[:,2], 0)
 
