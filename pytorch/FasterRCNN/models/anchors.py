@@ -179,6 +179,7 @@ def generate_rpn_map(anchor_map, anchor_valid_map, gt_boxes, object_iou_threshol
        ground truth map.
   """
   height, width, num_anchors = anchor_valid_map.shape
+  # import pdb; pdb.set_trace()
 
   # Convert ground truth box corners to (M,4) tensor and class indices to (M,)
   gt_box_corners = np.array([ box.corners for box in gt_boxes ])
@@ -252,7 +253,10 @@ def generate_rpn_map(anchor_map, anchor_valid_map, gt_boxes, object_iou_threshol
   # Compute box delta regression targets for each anchor
   box_delta_targets = np.empty((n, 4))
   box_delta_targets[:,0:2] = (gt_box_centers[gt_box_assignments] - anchor_map[:,0:2]) / anchor_map[:,2:4] # ty = (box_center_y - anchor_center_y) / anchor_height, tx = (box_center_x - anchor_center_x) / anchor_width
-  box_delta_targets[:,2:4] = np.log(gt_box_sides[gt_box_assignments] / anchor_map[:,2:4])                 # th = log(box_height / anchor_height), tw = log(box_width / anchor_width)
+  if gt_boxes[0].class_index != 0:
+    box_delta_targets[:,2:4] = np.log(gt_box_sides[gt_box_assignments] / anchor_map[:,2:4])                 # th = log(box_height / anchor_height), tw = log(box_width / anchor_width)
+  else:
+    box_delta_targets[:,2:4] = 0
 
   # Assemble RPN ground truth map
   rpn_map = np.zeros((height, width, num_anchors, 6))
